@@ -39,3 +39,9 @@
 
 # debug information files
 *.dwo
+
+# local history plugin
+.history
+
+.DS_Store
+local
