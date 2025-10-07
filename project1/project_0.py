@@ -18,7 +18,7 @@ OUTPUT_FILENAME = "recording.wav"
 INPUT_FILENAME = "predefined_wave.wav"
 CHANNELS = 1
 
-print(client.blocksize)
+# print(client.blocksize)
 
 
 def audio_reader_thread_func():
@@ -30,10 +30,10 @@ def audio_reader_thread_func():
         current_frame = 0
 
         if samplerate != client.samplerate:
-            # TODO: unable to change JACK server sample rate, ref: https://www.reddit.com/r/linuxaudio/comments/195231g/qjackctl_does_not_change_the_samplerate_of_jack/
+            # can be fixed by `jackd -d coreaudio -r SAMPLERATE`
             raise ValueError(
-                f"文件采样率 ({samplerate} Hz) 与 JACK 服务器采样率 "
-                f"({client.samplerate} Hz) 不匹配"
+                f"File sample rate ({samplerate} Hz) does not match JACK server sample rate "
+                f"({client.samplerate} Hz)"
             )
 
         while not stop_event.is_set() and current_frame < total_frames:
