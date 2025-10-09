@@ -23,6 +23,13 @@ task2_wave_component = [
     {"A": 1.0, "f": 1000.0, "phi": 1.0},
     {"A": 1.0, "f": 10000.0, "phi": 1.0},
 ]
+
+C_E_G = [
+    {"A": 1.0, "f": 261.63, "phi": 1.0},  # C4
+    {"A": 1.0, "f": 329.63, "phi": 1.0},  # E4
+    {"A": 1.0, "f": 392.00, "phi": 1.0},  # G4
+]
+
 default_wave_component = [{"A": 1.0, "f": 440.0, "phi": 1.0}]
 global_phase_accumulator = 0
 
@@ -152,7 +159,7 @@ with client:
         while True:
             user_input = (
                 input(
-                    "Enter 'r' to record, 'p' to play wave from audio file, 'w' to play custom wave: "
+                    "Enter 'r' to record, 'p' to play wave from audio file, 'task2' to play custom wave: "
                 )
                 .strip()
                 .lower()
@@ -167,7 +174,8 @@ with client:
                     reader_thread.start()
                 case "task2":
                     wave_thread = threading.Thread(
-                        target=wave_player_thread_func, args=(task2_wave_component)
+                        target=wave_player_thread_func,
+                        args=(C_E_G, 5.0),
                     )
                     wave_thread.start()
         event.wait()
