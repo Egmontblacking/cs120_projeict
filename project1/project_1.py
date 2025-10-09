@@ -14,14 +14,66 @@ client = jack.Client("PythonAudioProcessor")
 in1 = client.inports.register("input_1")
 out1 = client.outports.register("output_1")
 
-OUTPUT_FILENAME = "recording.wav"
-INPUT_FILENAME = "predefined_wave.wav"
 CHANNELS = 1
 
 # print(client.blocksize)
 
+# $$ f(t)=\sin (2 \pi \cdot 1000 \cdot t)+\sin (2 \pi \cdot 10000 \cdot t) $$
+task2_wave_component = [
+    {"A": 1.0, "f": 1000.0, "phi": 1.0},
+    {"A": 1.0, "f": 10000.0, "phi": 1.0},
+]
+default_wave_component = [{"A": 1.0, "f": 440.0, "phi": 1.0}]
+global_phase_accumulator = 0
 
-def audio_reader_thread_func():
+
+def wave_player_thread_func(wave: list[dict] = default_wave_component, volume=10.0):
+
+    samplerate = client.samplerate
+    blocksize = client.blocksize
+
+    max_amp = sum(c["A"] for c in wave)
+    normalization_factor = 1.0 / max_amp if max_amp > 0 else 0.0
+
+    global global_phase_accumulator
+
+    component_data = []
+    for component in wave:
+        # k = omega / samplerate
+        k = 2.0 * np.pi * component["f"] / samplerate
+        component_data.append({"k": k, "A": component["A"], "phi": component["phi"]})
+
+    indices = np.arange(blocksize)
+
+    try:
+        while not stop_event.is_set():
+            # phase_indices[n] = global_phase_accumulator + n
+            phase_indices = global_phase_accumulator + indices
+
+            total_wave = np.zeros(blocksize, dtype=np.float32)
+
+            for data in component_data:
+                wave = (
+                    data["A"] * volume * np.sin(data["k"] * phase_indices + data["phi"])
+                )
+                total_wave += wave
+
+            block_data = total_wave * normalization_factor
+
+            playback_queue.put(block_data)
+
+            global_phase_accumulator += blocksize
+
+            # if playback_queue.full():
+            #      time.sleep(0.001)
+
+    except Exception as e:
+        print(f"wave player thread error : {e}")
+    finally:
+        print("wave player thread finished.")
+
+
+def audio_player_thread_func(INPUT_FILENAME="predefined_wave.wav"):
     try:
         data, samplerate = sf.read(INPUT_FILENAME, dtype="float32")
         frame_size = client.blocksize
@@ -46,12 +98,12 @@ def audio_reader_thread_func():
             playback_queue.put(frame_data)
             current_frame += frame_size
     except Exception as e:
-        print(f"Audio reader thread error: {e}")
+        print(f"Audio file player thread error: {e}")
     finally:
-        print("Audio reader thread finished.")
+        print("Audio file player thread finished.")
 
 
-def record_thread_func():
+def record_thread_func(OUTPUT_FILENAME="recording.wav"):
     try:
         with sf.SoundFile(
             OUTPUT_FILENAME, mode="w", samplerate=client.samplerate, channels=CHANNELS
@@ -99,7 +151,11 @@ with client:
     try:
         while True:
             user_input = (
-                input("Enter 'r' to record, 'p' to play wave: ").strip().lower()
+                input(
+                    "Enter 'r' to record, 'p' to play wave from audio file, 'w' to play custom wave: "
+                )
+                .strip()
+                .lower()
             )
             match user_input:
                 case "r":
@@ -107,8 +163,13 @@ with client:
                     record_thread.start()
                     break
                 case "p":
-                    reader_thread = threading.Thread(target=audio_reader_thread_func)
+                    reader_thread = threading.Thread(target=audio_player_thread_func)
                     reader_thread.start()
+                case "task2":
+                    wave_thread = threading.Thread(
+                        target=wave_player_thread_func, args=(task2_wave_component)
+                    )
+                    wave_thread.start()
         event.wait()
     except KeyboardInterrupt:
         print("\nInterrupted by user")
@@ -120,3 +181,6 @@ with client:
         if "reader_thread" in locals() and reader_thread.is_alive():
             reader_thread.join()
             print("Playback finished.")
+        if "wave_thread" in locals() and wave_thread.is_alive():
+            wave_thread.join()
+            print("Wave playback finished.")
