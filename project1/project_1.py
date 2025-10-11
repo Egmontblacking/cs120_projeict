@@ -5,84 +5,25 @@ import queue
 import soundfile as sf
 import scipy
 from Transmitter import Transmitter
-from Receiver import Receiver
+from Receiver import Receiver, ReceiverState
 from CONFIG import Config
 import time
+
 
 event = threading.Event()
 stop_event = threading.Event()
 
-in_queue = queue.Queue()
+record_queue = queue.Queue()
 playback_queue = queue.Queue()
 
 client = jack.Client("PythonAudioProcessor")
-print("JACK server sample rate:", client.samplerate)
 in1 = client.inports.register("input_1")
 out1 = client.outports.register("output_1")
 
-CHANNELS = 1
-
-global_phase_accumulator = 0
+CONFIG = Config(client.samplerate, client.blocksize)
 
 
-######################
-def transmitter_thread_func():
-    """Reads file, creates frame, and puts it on the playback queue."""
-    print("--- Transmitter Thread Started ---")
-    try:
-        with open(Config.INPUT_FILENAME, "r") as f:
-            bits = np.array(list(map(int, f.read().strip())), dtype=np.uint8)
-        print(f"Read {len(bits)} bits from '{Config.INPUT_FILENAME}'")
-
-        tx = Transmitter(Config())
-        frame_signal = tx.create_frame(bits)
-
-        # Put frame signal onto playback queue block by block
-        frame_size = client.blocksize
-        current_pos = 0
-        while not stop_event.is_set() and current_pos < len(frame_signal):
-            end_pos = current_pos + frame_size
-            block = frame_signal[current_pos:end_pos]
-
-            if len(block) < frame_size:  # Pad the last block with zeros
-                block = np.pad(block, (0, frame_size - len(block)), "constant")
-
-            playback_queue.put(block)
-            current_pos += frame_size
-
-        print("--- Transmission frame queued successfully ---")
-
-    except Exception as e:
-        print(f"Transmitter thread error: {e}")
-    finally:
-        print("--- Transmitter Thread Finished ---")
-
-
-########################
-def receiver_thread_func():
-    """Gets audio from recording queue and processes it to find frames."""
-    print("--- Receiver Thread Started ---")
-    rx = Receiver(Config())
-    total_bits_received = 0
-    min_processing_unit = np.array([], dtype=np.float32, len=0)
-    min_processing_len = client.blocksize * 10  # Process at least 10 blocks at a time
-
-    try:
-        with open(Config.OUTPUT_FILENAME, "w") as f:
-            while not stop_event.is_set():
-                # try:
-                while not in_queue.empty():
-                    min_processing_unit = np.append(
-                        min_processing_unit, in_queue.get_nowait()
-                    )
-
-    except Exception as e:
-        print(f"Receiver thread error: {e}")
-    finally:
-        print("--- Receiver Thread Finished ---")
-
-
-def audio_player_thread_func(data):
+def playback_thread_func(data):
     try:
         frame_size = client.blocksize
         total_frames = len(data)
@@ -103,15 +44,24 @@ def audio_player_thread_func(data):
         print("Audio file has been put into queue.\n")
 
 
-def record_thread_func(OUTPUT_FILENAME="recording.wav"):
+def record_thread_func(record=True):
     try:
         with sf.SoundFile(
-            OUTPUT_FILENAME, mode="w", samplerate=client.samplerate, channels=CHANNELS
+            CONFIG.OUTPUT_WAV_FILENAME,
+            mode="w",
+            samplerate=CONFIG.SAMPLE_RATE,
+            channels=CONFIG.CHANNELS,
         ) as file:
             while not stop_event.is_set():
                 try:
-                    data = in_queue.get(timeout=0.5)
-                    file.write(data)
+                    record_block = record_queue.get_nowait()
+                    if record:
+                        file.write(record_block)
+                    else:
+                        rx.receive_sample(record_block)
+                        if rx.state == ReceiverState.RECEIVE_HEADER:
+                            print("preamble detected")
+                            break
                 except queue.Empty:
                     continue
     except Exception as e:
@@ -126,7 +76,7 @@ def process(nframes):
     out1_array = out1.get_array()
 
     # if "record_thread" in globals() and record_thread.is_alive():
-    in_queue.put(in1_array.copy())
+    record_queue.put(in1_array.copy())
 
     try:
         playback_data = playback_queue.get_nowait()
@@ -143,12 +93,7 @@ with client:
     try:
         while True:
             user_input = (
-                input(
-                    "Enter 'r' to record, "
-                    "'p' to play wave from audio file, "
-                    "'tx' to transmit, "
-                    "'rx' to receive:"
-                )
+                input("Enter 'r' to record, " "'tx' to transmit, " "'rx' to receive:")
                 .strip()
                 .lower()
             )
@@ -156,22 +101,23 @@ with client:
                 case "r":
                     record_thread = threading.Thread(target=record_thread_func)
                     record_thread.start()
-                case "p":
-                    reader_thread = threading.Thread(target=audio_player_thread_func)
-                    reader_thread.start()
                 case "tx":
-                    tx = Transmitter(Config())
+                    tx = Transmitter(CONFIG)
                     with open(Config.INPUT_FILENAME, "r") as f:
                         bits = np.array(
                             list(map(int, f.read().strip())), dtype=np.uint8
                         )
                     frame_signal = tx.create_frame(bits)
                     tx_thread = threading.Thread(
-                        target=audio_player_thread_func, args=(frame_signal,)
+                        target=playback_thread_func, args=(frame_signal,)
                     )
                     tx_thread.start()
-
-            # event.wait()
+                case "rx":
+                    rx = Receiver(CONFIG)
+                    rx_thread = threading.Thread(
+                        target=record_thread_func, args=(False,)
+                    )
+                    rx_thread.start()
     except KeyboardInterrupt:
         print("\nInterrupted by user")
     finally:

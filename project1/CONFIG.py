@@ -2,15 +2,16 @@ class Config:
     """Class to hold all physical layer and application parameters."""
 
     # --- Audio Settings ---
-    SAMPLE_RATE = 44100  # Hz, must match JACK server setting
     CHANNELS = 1  # Mono
+
+    OUTPUT_WAV_FILENAME = "recording.wav"
 
     # --- Physical Layer Parameters ---
     BAUD_RATE = 2000  # Symbols per second
     CARRIER_FREQ = 8000.0  # Hz
-    SAMPLES_PER_SYMBOL = int(SAMPLE_RATE / BAUD_RATE)
+    # SAMPLES_PER_SYMBOL = int(SAMPLE_RATE / BAUD_RATE)
 
-    PREAMBLE_SAMPLES = 4400  # 440 samples
+    PREAMBLE_SAMPLES = 440  # 440 samples
     PREAMBLE_FREQ_START = 2000  # Hz (10kHz - 8kHz)
     PREAMBLE_FREQ_MID = 10000  # Hz
     PREAMBLE_FREQ_END = 2000  # Hz (triangle wave: up then down)
@@ -33,3 +34,8 @@ class Config:
     OUTPUT_FILENAME = "OUTPUT.txt"
     RECORDING_FILENAME = "recording.wav"
     PAYLOAD_BITS = 10000
+
+    def __init__(self, sample_rate, block_size):
+        self.SAMPLE_RATE = sample_rate
+        self.BLOCK_SIZE = block_size
+        self.SAMPLES_PER_SYMBOL = int(self.SAMPLE_RATE / self.BAUD_RATE)
