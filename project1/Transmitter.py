@@ -50,62 +50,62 @@ class Transmitter:
 
         return frame_wave
 
-    # def create_frame(self, payload_bits: np.ndarray):
-    #     """Create complete transmission from payload_bits (matching MATLAB)."""
-    #     np.random.seed(1)  # Match MATLAB seed
-
-    #     output_track = np.array([], dtype=np.float32)
-
-    #     # Calculate number of frames based on payload_bits length
-    #     # Each frame contains FRAME_DATA_BITS (100 bits including ID)
-    #     num_frames = len(payload_bits) // self.config.FRAME_DATA_BITS
-
-    #     print(f"Creating {num_frames} frames from {len(payload_bits)} bits")
-
-    #     # Generate frames
-    #     for frame_id in range(1, num_frames + 1):
-    #         # Get FRAME_DATA_BITS for this frame from payload
-    #         start_idx = (frame_id - 1) * self.config.FRAME_DATA_BITS
-    #         end_idx = start_idx + self.config.FRAME_DATA_BITS
-    #         frame_bits = payload_bits[start_idx:end_idx]
-
-    #         # Add CRC-8
-    #         crc_val = self.crc8_func(frame_bits.tobytes())
-    #         crc_bits = np.array(
-    #             [int(b) for b in format(crc_val, "08b")], dtype=np.uint8
-    #         )
-
-    #         # Total: 108 bits
-    #         frame_with_crc = np.concatenate([frame_bits, crc_bits])
-
-    #         # Modulate
-    #         frame_wave = self._modulate_bits(frame_with_crc)
-
-    #         # Add preamble
-    #         frame_wave_pre = np.concatenate([self.preamble, frame_wave])
-
-    #         # Add random inter-frame gaps (matching MATLAB)
-    #         gap_before = np.zeros(
-    #             int(np.random.rand() * self.config.INTER_FRAME_GAP_MAX),
-    #             dtype=np.float32,
-    #         )
-    #         gap_after = np.zeros(
-    #             int(np.random.rand() * self.config.INTER_FRAME_GAP_MAX),
-    #             dtype=np.float32,
-    #         )
-
-    #         # Append to output track
-    #         output_track = np.concatenate(
-    #             [output_track, gap_before, frame_wave_pre, gap_after]
-    #         )
-
-    #         if frame_id % 10 == 0:
-    #             print(f"Generated frame {frame_id}/{num_frames}")
-
-    #     print(
-    #         f"Total transmission length: {len(output_track)/self.config.SAMPLE_RATE:.2f} seconds"
-    #     )
-    #     return output_track.astype(np.float32)
-
     def create_frame(self, payload_bits: np.ndarray):
-        return self._generate_preamble()
+        """Create complete transmission from payload_bits (matching MATLAB)."""
+        np.random.seed(1)  # Match MATLAB seed
+
+        output_track = np.array([], dtype=np.float32)
+
+        # Calculate number of frames based on payload_bits length
+        # Each frame contains FRAME_DATA_BITS (100 bits including ID)
+        num_frames = len(payload_bits) // self.config.FRAME_DATA_BITS
+
+        print(f"Creating {num_frames} frames from {len(payload_bits)} bits")
+
+        # Generate frames
+        for frame_id in range(1, num_frames + 1):
+            # Get FRAME_DATA_BITS for this frame from payload
+            start_idx = (frame_id - 1) * self.config.FRAME_DATA_BITS
+            end_idx = start_idx + self.config.FRAME_DATA_BITS
+            frame_bits = payload_bits[start_idx:end_idx]
+
+            # Add CRC-8
+            crc_val = self.crc8_func(frame_bits.tobytes())
+            crc_bits = np.array(
+                [int(b) for b in format(crc_val, "08b")], dtype=np.uint8
+            )
+
+            # Total: 108 bits
+            frame_with_crc = np.concatenate([frame_bits, crc_bits])
+
+            # Modulate
+            frame_wave = self._modulate_bits(frame_with_crc)
+
+            # Add preamble
+            frame_wave_pre = np.concatenate([self.preamble, frame_wave])
+
+            # Add random inter-frame gaps (matching MATLAB)
+            gap_before = np.zeros(
+                int(np.random.rand() * self.config.INTER_FRAME_GAP_MAX),
+                dtype=np.float32,
+            )
+            gap_after = np.zeros(
+                int(np.random.rand() * self.config.INTER_FRAME_GAP_MAX),
+                dtype=np.float32,
+            )
+
+            # Append to output track
+            output_track = np.concatenate(
+                [output_track, gap_before, frame_wave_pre, gap_after]
+            )
+
+            if frame_id % 10 == 0:
+                print(f"Generated frame {frame_id}/{num_frames}")
+
+        print(
+            f"Total transmission length: {len(output_track)/self.config.SAMPLE_RATE:.2f} seconds"
+        )
+        return output_track.astype(np.float32)
+
+    # def create_frame(self, payload_bits: np.ndarray):
+    #     return self._generate_preamble()

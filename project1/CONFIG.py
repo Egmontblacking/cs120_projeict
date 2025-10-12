@@ -7,10 +7,10 @@ class Config:
     OUTPUT_WAV_FILENAME = "recording.wav"
 
     # --- Physical Layer Parameters (matching MATLAB) ---
-    CARRIER_FREQ = 10000.0  # Hz, 10kHz (matching MATLAB fc)
+    CARRIER_FREQ = 8000.0  # Hz, 10kHz (matching MATLAB fc)
     SAMPLES_PER_BIT = 44  # 44 samples per bit (matching MATLAB)
 
-    PREAMBLE_SAMPLES = 4400  # 4400 samples
+    PREAMBLE_SAMPLES = 2200  # 4400 samples
     PREAMBLE_FREQ_START = 2000  # Hz (10kHz - 8kHz)
     PREAMBLE_FREQ_MID = 10000  # Hz
     PREAMBLE_FREQ_END = 2000  # Hz (triangle wave: up then down)
@@ -23,7 +23,7 @@ class Config:
     FRAME_WITH_CRC_BITS = 116  # Total bits per frame
 
     NUM_FRAMES = 100  # Number of frames to transmit
-    INTER_FRAME_GAP_MAX = 100  # Max random gap between frames
+    INTER_FRAME_GAP_MAX = 10000  # Max random gap between frames
 
     # --- Receiver Settings ---
     PREAMBLE_CORR_THRESHOLD = 0.05  # Absolute threshold

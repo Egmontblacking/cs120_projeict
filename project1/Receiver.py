@@ -19,11 +19,11 @@ class Receiver:
         self.config = config
         self.state = ReceiverState.WAIT_PREAMBLE
 
-        self.sample_index = -config.BLOCK_SIZE
-        self.preamble_buffer = np.zeros(
-            config.PREAMBLE_SAMPLES * 1000, dtype=np.float32
-        )
+        self.sample_index = 0
+
         self.preamble_template = Transmitter(config).preamble
+        self.preamble_template_len = len(self.preamble_template)
+        self.buffer = np.zeros(self.preamble_template_len * 10, dtype=np.float32)
 
         # Generate continuous carrier (matching MATLAB)
         t_carrier = np.arange(0, config.SAMPLE_RATE) / config.SAMPLE_RATE
@@ -76,78 +76,85 @@ class Receiver:
         """Process incoming audio samples (matching MATLAB logic)."""
         block_len = len(block)
 
-        self.preamble_buffer[:-block_len] = self.preamble_buffer[block_len:]
-        self.preamble_buffer[-block_len:] = block
+        self.buffer[:-block_len] = self.buffer[block_len:]
+        self.buffer[-block_len:] = block
         self.sample_index += block_len
 
-        if self.state == ReceiverState.WAIT_PREAMBLE:
-
-            correlation = correlate(
-                self.preamble_buffer, self.preamble_template, mode="same"
-            )
-
-            corr_abs = np.abs(correlation)
-            noise_median = np.median(corr_abs)
-            noise_std = np.std(corr_abs)
-
-            k = 10
-            threshold = max(0.1, noise_median + k * noise_std)
-
-            tmp_detected_index = np.argmax(np.abs(correlation))
-            if corr_abs[tmp_detected_index] > threshold:
-                print(corr_abs[tmp_detected_index], threshold)
-                detected_index = tmp_detected_index
-                print(
-                    "Detected preamble at sample index:",
-                    self.sample_index + detected_index,
+        if self.sample_index > self.preamble_template_len:
+            if self.state == ReceiverState.WAIT_PREAMBLE:
+                search_window = self.buffer[-self.preamble_template_len :]
+                correlation = correlate(
+                    search_window, self.preamble_template, mode="valid"
                 )
-                # self.state = ReceiverState.RECEIVE_FRAME
-                return
-                self.start_index = self.sample_index + detected_index
-
-            # i += detected_index
-
-            # print(np.abs(correlation[detected_index]))
-
-        elif self.state == ReceiverState.RECEIVE_FRAME:
-            # Accumulate samples for decoding
-            self.decode_fifo = np.append(self.decode_fifo, sample)
-
-            # Check if we have enough samples
-            if len(self.decode_fifo) >= self.expected_samples:
-                # Decode the frame
-                frame_bits = self._demodulate_frame(
-                    self.decode_fifo[: self.expected_samples]
+                buffer_correlation = correlate(
+                    self.buffer, self.preamble_template, mode="valid"
                 )
+                peak_corr_value = np.max(np.abs(correlation))
+                # peak_corr_index = np.argmax(np.abs(correlation))
 
-                # Extract frame data and CRC
-                frame_data = frame_bits[: self.config.FRAME_TOTAL_BITS]
-                received_crc_bits = frame_bits[self.config.FRAME_TOTAL_BITS :]
+                # window_energy = np.mean(np.square(search_window))
+                # peak_to_avg_ratio = peak_corr_value / (
+                #     window_energy * self.preamble_template_len + 1e-9
+                # )
 
-                # Compute CRC
-                computed_crc = self.crc8_func(frame_data.tobytes())
-                received_crc = int("".join(map(str, received_crc_bits)), 2)
+                buffer_corr_abs = np.abs(buffer_correlation)
+                noise_median = np.median(buffer_corr_abs)
+                noise_std = np.std(buffer_corr_abs)
 
-                # Extract frame ID
-                frame_id = int("".join(map(str, frame_data[:8])), 2)
+                k = 5.0
+                threshold = noise_median + k * noise_std
 
-                self.total_frames += 1
-
-                # Check CRC
-                if computed_crc == received_crc:
-                    print(f"✓ Frame {frame_id} correct (CRC: {computed_crc})")
-                    self.correct_frames += 1
-                    # Store received data
-                    self.all_received_bits.extend(frame_data)
-                else:
+                detected_index = np.argmax(np.abs(correlation))
+                if correlation[detected_index] > threshold:
                     print(
-                        f"✗ Frame {frame_id} CRC failed (rx={received_crc}, calc={computed_crc})"
+                        "Preamble correlation:", correlation[detected_index], threshold
+                    )
+                    self.start_index = (
+                        self.sample_index - self.preamble_template_len + detected_index
                     )
 
-                # Reset to WAIT_PREAMBLE state
-                self.state = ReceiverState.WAIT_PREAMBLE
-                self.start_index = 0
-                self.decode_fifo = np.array([], dtype=np.float32)
+                    # 5. 切换状态并启动冷却计时器
+                    # self.state = ReceiverState.RECEIVE_FRAME
+
+            elif self.state == ReceiverState.RECEIVE_FRAME:
+                # Accumulate samples for decoding
+                self.decode_fifo = np.append(self.decode_fifo, sample)
+
+                # Check if we have enough samples
+                if len(self.decode_fifo) >= self.expected_samples:
+                    # Decode the frame
+                    frame_bits = self._demodulate_frame(
+                        self.decode_fifo[: self.expected_samples]
+                    )
+
+                    # Extract frame data and CRC
+                    frame_data = frame_bits[: self.config.FRAME_TOTAL_BITS]
+                    received_crc_bits = frame_bits[self.config.FRAME_TOTAL_BITS :]
+
+                    # Compute CRC
+                    computed_crc = self.crc8_func(frame_data.tobytes())
+                    received_crc = int("".join(map(str, received_crc_bits)), 2)
+
+                    # Extract frame ID
+                    frame_id = int("".join(map(str, frame_data[:8])), 2)
+
+                    self.total_frames += 1
+
+                    # Check CRC
+                    if computed_crc == received_crc:
+                        print(f"✓ Frame {frame_id} correct (CRC: {computed_crc})")
+                        self.correct_frames += 1
+                        # Store received data
+                        self.all_received_bits.extend(frame_data)
+                    else:
+                        print(
+                            f"✗ Frame {frame_id} CRC failed (rx={received_crc}, calc={computed_crc})"
+                        )
+
+                    # Reset to WAIT_PREAMBLE state
+                    self.state = ReceiverState.WAIT_PREAMBLE
+                    self.start_index = 0
+                    self.decode_fifo = np.array([], dtype=np.float32)
 
     def get_statistics(self):
         """Return reception statistics."""
