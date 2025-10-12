@@ -13,7 +13,7 @@ event = threading.Event()
 stop_event = threading.Event()
 
 in_queue = queue.Queue()
-playback_queue = queue.Queue()
+playback_queue = queue.Queue(maxsize=1024)
 
 client = jack.Client("PythonAudioProcessor")
 print("JACK server sample rate:", client.samplerate)
@@ -138,8 +138,8 @@ def sinwave_player_thread_func(wave: list[dict] = default_wave_component, volume
 
             global_phase_accumulator += blocksize
 
-            # if playback_queue.full():
-            #      time.sleep(0.001)
+            if playback_queue.full():
+                time.sleep(0.001)
 
     except Exception as e:
         print(f"wave player thread error : {e}")
@@ -200,7 +200,7 @@ def process(nframes):
     out1_array = out1.get_array()
 
     # if "record_thread" in globals() and record_thread.is_alive():
-    in_queue.put(in1_array.copy())
+    #     in_queue.put(in1_array.copy())
 
     try:
         playback_data = playback_queue.get_nowait()
@@ -240,7 +240,7 @@ with client:
                 case "task2":
                     wave_thread = threading.Thread(
                         target=sinwave_player_thread_func,
-                        args=(C_E_G, 5.0),
+                        args=(task2_wave_component, 5.0),
                     )
                     wave_thread.start()
             # event.wait()
