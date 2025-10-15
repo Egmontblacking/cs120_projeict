@@ -3,97 +3,31 @@ import threading
 import numpy as np
 import queue
 import soundfile as sf
+import scipy
+from Transmitter import Transmitter
+from Receiver import Receiver, ReceiverState
+from CONFIG import Config
+import time
+
 
 event = threading.Event()
 stop_event = threading.Event()
 
-recording_queue = queue.Queue()
-playback_queue = queue.Queue(maxsize=1024)
+record_queue = queue.Queue()
+playback_queue = queue.Queue()
 
 client = jack.Client("PythonAudioProcessor")
 in1 = client.inports.register("input_1")
 out1 = client.outports.register("output_1")
 
-CHANNELS = 1
-
-# print(client.blocksize)
-
-# $$ f(t)=\sin (2 \pi \cdot 1000 \cdot t)+\sin (2 \pi \cdot 10000 \cdot t) $$
-task2_wave_component = [
-    {"A": 1.0, "f": 1000.0, "phi": 1.0},
-    {"A": 1.0, "f": 10000.0, "phi": 1.0},
-]
-
-C_E_G = [
-    {"A": 1.0, "f": 261.63, "phi": 1.0},  # C4
-    {"A": 1.0, "f": 329.63, "phi": 1.0},  # E4
-    {"A": 1.0, "f": 392.00, "phi": 1.0},  # G4
-]
-
-default_wave_component = [{"A": 1.0, "f": 440.0, "phi": 1.0}]
-global_phase_accumulator = 0
+CONFIG = Config(client.samplerate, client.blocksize)
 
 
-def wave_player_thread_func(wave: list[dict] = default_wave_component, volume=10.0):
-
-    samplerate = client.samplerate
-    blocksize = client.blocksize
-
-    max_amp = sum(c["A"] for c in wave)
-    normalization_factor = 1.0 / max_amp if max_amp > 0 else 0.0
-
-    global global_phase_accumulator
-
-    component_data = []
-    for component in wave:
-        # k = omega / samplerate
-        k = 2.0 * np.pi * component["f"] / samplerate
-        component_data.append({"k": k, "A": component["A"], "phi": component["phi"]})
-
-    indices = np.arange(blocksize)
-
+def playback_thread_func(data):
     try:
-        while not stop_event.is_set():
-            # phase_indices[n] = global_phase_accumulator + n
-            phase_indices = global_phase_accumulator + indices
-
-            total_wave = np.zeros(blocksize, dtype=np.float32)
-
-            for data in component_data:
-                wave = (
-                    data["A"] * volume * np.sin(data["k"] * phase_indices + data["phi"])
-                )
-                total_wave += wave
-
-            block_data = total_wave * normalization_factor
-
-            playback_queue.put(block_data)
-
-            global_phase_accumulator += blocksize
-
-            # if playback_queue.full():
-            #      time.sleep(0.001)
-
-    except Exception as e:
-        print(f"wave player thread error : {e}")
-    finally:
-        print("wave player thread finished.")
-
-
-def audio_player_thread_func(INPUT_FILENAME="predefined_wave.wav"):
-    try:
-        data, samplerate = sf.read(INPUT_FILENAME, dtype="float32")
         frame_size = client.blocksize
         total_frames = len(data)
-        print("block size:", frame_size, "len data:", total_frames)
         current_frame = 0
-
-        if samplerate != client.samplerate:
-            # can be fixed by `jackd -d coreaudio -r SAMPLERATE`
-            raise ValueError(
-                f"File sample rate ({samplerate} Hz) does not match JACK server sample rate "
-                f"({client.samplerate} Hz)"
-            )
 
         while not stop_event.is_set() and current_frame < total_frames:
             end_frame = min(current_frame + frame_size, total_frames)
@@ -107,18 +41,27 @@ def audio_player_thread_func(INPUT_FILENAME="predefined_wave.wav"):
     except Exception as e:
         print(f"Audio file player thread error: {e}")
     finally:
-        print("Audio file player thread finished.")
+        print("Audio file has been put into queue.\n")
 
 
-def record_thread_func(OUTPUT_FILENAME="recording.wav"):
+def record_thread_func(record=True):
     try:
         with sf.SoundFile(
-            OUTPUT_FILENAME, mode="w", samplerate=client.samplerate, channels=CHANNELS
+            CONFIG.OUTPUT_WAV_FILENAME,
+            mode="w",
+            samplerate=CONFIG.SAMPLE_RATE,
+            channels=CONFIG.CHANNELS,
         ) as file:
             while not stop_event.is_set():
                 try:
-                    data = recording_queue.get(timeout=0.5)
-                    file.write(data)
+                    record_block = record_queue.get_nowait()
+                    if record:
+                        file.write(record_block)
+                    else:
+                        rx.receive_sample(record_block)
+                        if rx.state == ReceiverState.RECEIVE_HEADER:
+                            print("preamble detected")
+                            break
                 except queue.Empty:
                     continue
     except Exception as e:
@@ -129,38 +72,28 @@ def record_thread_func(OUTPUT_FILENAME="recording.wav"):
 
 @client.set_process_callback
 def process(nframes):
-
     in1_array = in1.get_array()
     out1_array = out1.get_array()
 
-    # processed_data = in1_array * 0.5
-
-    if "record_thread" in globals() and record_thread.is_alive():
-        recording_queue.put(in1_array.copy())
+    # if "record_thread" in globals() and record_thread.is_alive():
+    record_queue.put(in1_array.copy())
 
     try:
         playback_data = playback_queue.get_nowait()
-        if playback_data is None:
-            print("Playback finished.")
-        else:
-            out1_array[:] = playback_data
+        out1_array[:] = playback_data
     except queue.Empty:
         out1_array[:] = 0
 
 
 with client:
-    print(
-        "Python JACK client is running. Press 'r' to start recording, Ctrl+C to stop."
-    )
+    print("Python JACK client is running.")
     client.connect("system:capture_1", in1)
     client.connect(out1, "system:playback_1")
 
     try:
         while True:
             user_input = (
-                input(
-                    "Enter 'r' to record, 'p' to play wave from audio file, 'task2' to play custom wave: "
-                )
+                input("Enter 'r' to record, " "'tx' to transmit, " "'rx' to receive:")
                 .strip()
                 .lower()
             )
@@ -168,27 +101,24 @@ with client:
                 case "r":
                     record_thread = threading.Thread(target=record_thread_func)
                     record_thread.start()
-                    break
-                case "p":
-                    reader_thread = threading.Thread(target=audio_player_thread_func)
-                    reader_thread.start()
-                case "task2":
-                    wave_thread = threading.Thread(
-                        target=wave_player_thread_func,
-                        args=(C_E_G, 5.0),
+                case "tx":
+                    tx = Transmitter(CONFIG)
+                    with open(Config.INPUT_FILENAME, "r") as f:
+                        bits = np.array(
+                            list(map(int, f.read().strip())), dtype=np.uint8
+                        )
+                    frame_signal = tx.create_frame(bits)
+                    tx_thread = threading.Thread(
+                        target=playback_thread_func, args=(frame_signal,)
                     )
-                    wave_thread.start()
-        event.wait()
+                    tx_thread.start()
+                case "rx":
+                    rx = Receiver(CONFIG)
+                    rx_thread = threading.Thread(
+                        target=record_thread_func, args=(False,)
+                    )
+                    rx_thread.start()
     except KeyboardInterrupt:
         print("\nInterrupted by user")
     finally:
         stop_event.set()
-        if "record_thread" in locals() and record_thread.is_alive():
-            record_thread.join()
-            print("Recording completed.")
-        if "reader_thread" in locals() and reader_thread.is_alive():
-            reader_thread.join()
-            print("Playback finished.")
-        if "wave_thread" in locals() and wave_thread.is_alive():
-            wave_thread.join()
-            print("Wave playback finished.")
