@@ -73,11 +73,11 @@ try:
                     decodeFIFO = RxFIFO[start_index + 1 : global_index]
                     print(f"提取了 {len(decodeFIFO)} 个样本用于解码")
 
-                    # TODO: 在这里添加解码逻辑
-
                     # 重置状态继续检测
                     state = 0
                     start_index = 0
+            elif state == 1:
+                pass  # TODO: 添加解码逻辑
 
         # 打印 CHUNK 信息
         print(
