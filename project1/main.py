@@ -13,8 +13,8 @@ VOLUME = 16384  # 设置音量为 50%
 CHANNELS = 1
 RATE = 44100
 OUTPUT_FILENAME = "output.wav"  # 输出文件名
-TEST_FILENAME = "test.wav"
-INPUT_TXT_TILENAME = "/Users/fanyuxin/Library/Mobile Documents/com~apple~CloudDocs/ShanghiTech/2025_fall/计算机网络/cs120_projeict/self/project1/input.txt"
+TEST_FILENAME = "preamble.wav"
+INPUT_TXT_TILENAME = "/Users/fanyuxin/Library/Mobile Documents/com~apple~CloudDocs/ShanghiTech/2025_fall/计算机网络/cs120_projeict/project1/input.txt"
 DATA_FRAME_LEN = 100
 
 p = pyaudio.PyAudio()
@@ -90,7 +90,7 @@ with open(INPUT_TXT_TILENAME, "r") as f:
         )
         audio_data = np.concatenate([audio_data, np.zeros(random.randint(0, 100))])
 
-# audio_data = (preamble * VOLUME).astype(np.int16)
+audio_data = (preamble * VOLUME).astype(np.int16)
 # out_stream.write(audio_data.tobytes())
 with sf.SoundFile(
     TEST_FILENAME, mode="w", samplerate=RATE, channels=CHANNELS, subtype="PCM_16"

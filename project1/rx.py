@@ -48,6 +48,7 @@ try:
         # 处理每个样本
         for i, current_sample in enumerate(audio_data_normalized):
             global_index = len(RxFIFO) - len(audio_data_normalized) + i
+            power = power * (1 - 1 / 64) + current_sample**2 / 64
 
             if state == 0:
                 # 更新同步 FIFO
@@ -62,8 +63,9 @@ try:
                     syncPower_localMax = corr
                     start_index = global_index
                 elif (global_index - start_index > 200) and (start_index != 0):
-                    print(f"检测到前导码！起始位置: {start_index}")
+                    # print(f"检测到前导码！起始位置: {start_index}")
                     preamble_count += 1
+                    print(preamble_count)
                     start_index_debug[start_index] = 1.5
                     syncPower_localMax = 0
                     syncFIFO = np.zeros(len(syncFIFO))
@@ -71,7 +73,7 @@ try:
 
                     # 提取数据到解码缓冲区
                     decodeFIFO = RxFIFO[start_index + 1 : global_index]
-                    print(f"提取了 {len(decodeFIFO)} 个样本用于解码")
+                    # print(f"提取了 {len(decodeFIFO)} 个样本用于解码")
 
                     # 重置状态继续检测
                     state = 0
@@ -80,9 +82,9 @@ try:
                 pass  # TODO: 添加解码逻辑
 
         # 打印 CHUNK 信息
-        print(
-            f"读取 CHUNK: {len(audio_data)} 样本, 总缓冲区: {len(RxFIFO)} 样本, 状态: {state}"
-        )
+        # print(
+        # f"读取 CHUNK: {len(audio_data)} 样本, 总缓冲区: {len(RxFIFO)} 样本, 状态: {state}"
+        # )
 
 except KeyboardInterrupt:
     print("\nstop receiving")
