@@ -1,5 +1,9 @@
-INPUT_PATH = "/Users/fanyuxin/Library/Mobile Documents/com~apple~CloudDocs/ShanghiTech/2025_fall/计算机网络/cs120_projeict/project1/INPUT.txt"
-OUTPUT_PATH = "/Users/fanyuxin/Library/Mobile Documents/com~apple~CloudDocs/ShanghiTech/2025_fall/计算机网络/cs120_projeict/project1/OUTPUT.txt"
+# INPUT_PATH = "/Users/fanyuxin/Library/Mobile Documents/com~apple~CloudDocs/ShanghiTech/2025_fall/计算机网络/cs120_projeict/project1/INPUT.txt"
+# OUTPUT_PATH = "/Users/fanyuxin/Library/Mobile Documents/com~apple~CloudDocs/ShanghiTech/2025_fall/计算机网络/cs120_projeict/project1/OUTPUT.txt"
+from pathlib import Path
+
+INPUT_PATH = str(Path(__file__).parent / "INPUT.txt")
+OUTPUT_PATH = str(Path(__file__).parent / "OUTPUT.txt")
 
 # 读取文件
 with open(INPUT_PATH, "r") as f:

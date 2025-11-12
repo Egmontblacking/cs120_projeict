@@ -4,14 +4,13 @@ import soundfile as sf
 from scipy.ndimage import uniform_filter1d
 import matplotlib.pyplot as plt
 from pathlib import Path
+from binutil import OutputWriter
 
-CHUNK = 1024
-FORMAT = pyaudio.paFloat32
-# MAX_VOLUME = 32768  # 16 位音频的最大幅度
-# VOLUME = 16384  # 设置音量为 50%
 CHANNELS = 1
+CHUNK = 1024
 RATE = 48000
-OUTPUT_TXT_TILENAME = str(Path(__file__).parent / "OUTPUT.txt")
+FORMAT = pyaudio.paFloat32
+OUTPUT_FILENAME = str(Path(__file__).parent / "OUTPUT.bin")
 
 
 # CRC8 生成器（与发送端相同）
@@ -77,9 +76,7 @@ print("start receiving...")
 
 preamble_count = 0
 
-# 打开输出文件，准备写入解码结果
-output_file = open(OUTPUT_TXT_TILENAME, "w")
-print(f"输出文件已打开: {OUTPUT_TXT_TILENAME}")
+m_OutputWriter = OutputWriter()
 
 try:
     while True:
@@ -87,16 +84,13 @@ try:
         data = in_stream.read(CHUNK, exception_on_overflow=False)
         # audio_data = np.frombuffer(data, dtype=np.int16)
 
-        # 归一化到 [-1, 1]
-        # audio_data_normalized = audio_data.astype(np.float32) / MAX_VOLUME
-        audio_data_normalized = np.frombuffer(data, dtype=np.float32)
+        audio_data = np.frombuffer(data, dtype=np.float32)
 
-        # 添加到接收缓冲区
-        RxFIFO = np.concatenate([RxFIFO, audio_data_normalized])
+        RxFIFO = np.concatenate([RxFIFO, audio_data])
 
         # 处理每个样本
-        for i, current_sample in enumerate(audio_data_normalized):
-            global_index = len(RxFIFO) - len(audio_data_normalized) + i
+        for i, current_sample in enumerate(audio_data):
+            global_index = len(RxFIFO) - len(audio_data) + i
             power = power * (1 - 1 / 64) + current_sample**2 / 64
 
             if state == 0:
@@ -130,16 +124,6 @@ try:
 
                 if len(decodeFIFO) == 44 * 108:
                     print(f"\n开始解码 {len(decodeFIFO)} 个样本...")
-
-                    # 关键修复：使用连续的载波相位
-                    # 从 preamble 结束位置继续计算相位
-                    # fc = 10e3  # 载波频率 10kHz
-
-                    # 关键修复：载波应该从 0 开始，与发送端一致
-                    # 发送端使用 carrier[0:44], carrier[44:88] ...
-                    # 所以接收端也应该从 0 开始计时
-                    # t_decode = np.arange(len(decodeFIFO)) / RATE
-                    # carrier_local = np.sin(2 * np.pi * fc * t_decode)
 
                     t = np.arange(0, 1, 1 / RATE)  # a temp time for 1 second
                     fc = 10 * 10**3  # carrier frequency 10kHz
@@ -217,8 +201,8 @@ try:
 
                     # 实时写入文件（只写入数据部分，不包含 CRC）
                     bits_to_wt = decoded_bits[:100]  # 只写前 100 位
-                    output_file.write(bits_to_wt)
-                    output_file.flush()  # 立即刷新到磁盘
+                    for bit in bits_to_wt:
+                        m_OutputWriter.append_bit(bit)
                     print(f"已写入 {len(bits_to_wt)} 比特到文件")
 
                     # 重置状态，继续检测下一个前导码
@@ -239,9 +223,8 @@ finally:
     in_stream.close()
     p.terminate()
 
-    # 关闭输出文件
-    output_file.close()
-    print(f"输出文件已关闭: {OUTPUT_TXT_TILENAME}")
+    m_OutputWriter.close()
+    print(f"输出文件已关闭: {OUTPUT_FILENAME}")
 
     print(f"总共检测到前导码次数: {preamble_count}")
     print("cleanup finished")
