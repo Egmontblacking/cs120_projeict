@@ -71,7 +71,7 @@ def main():
         # 运行 python check.py <key>
         key = int(sys.argv[1])
         print("Generating INPUT.bin with key:", key)
-        generate("INPUT.bin", key, count_bytes=200)
+        generate("INPUT.bin", key, count_bytes=6250)
     elif num_args == 3:
         # 场景 3: 运行 python check.py in.bin out.bin
         file1 = sys.argv[1]

@@ -98,6 +98,9 @@ with open(INPUT_FILENAME, "r") as f:
         print(f"Frame {i+1} Data with CRC: {frame_data_with_crc}")
         print(f"Data length with CRC: {len(frame_data_with_crc)} bits")
 
+        # FIXME: temporary disable CRC
+        # frame_data_with_crc = frame_data
+
         # modulation (现在调制 108 个比特: 100 数据 + 8 CRC)
         frame_wave = np.zeros(len(frame_data_with_crc) * 44)
         for j in range(len(frame_data_with_crc)):
@@ -115,9 +118,9 @@ with open(INPUT_FILENAME, "r") as f:
 
         frame_wave = np.concatenate([preamble, frame_wave])
 
-        audio_data = np.concatenate([audio_data, np.zeros(random.randint(0, 1000))])
+        audio_data = np.concatenate([audio_data, np.zeros(random.randint(0, 50))])
         audio_data = np.concatenate([audio_data, frame_wave])
-        audio_data = np.concatenate([audio_data, np.zeros(random.randint(0, 1000))])
+        # audio_data = np.concatenate([audio_data, np.zeros(random.randint(0, 1000))])
 
 # audio_data = (preamble * VOLUME).astype(np.int16)
 # audio_data = preamble
