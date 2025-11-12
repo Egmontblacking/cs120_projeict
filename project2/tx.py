@@ -4,7 +4,7 @@ import soundfile as sf
 from matplotlib import pyplot as plt
 import random
 from pathlib import Path
-from binutil import read_input, write_output
+from binutil import read_input
 
 CHANNELS = 1
 CHUNK = 1024
@@ -101,9 +101,17 @@ with open(INPUT_FILENAME, "r") as f:
         # modulation (现在调制 108 个比特: 100 数据 + 8 CRC)
         frame_wave = np.zeros(len(frame_data_with_crc) * 44)
         for j in range(len(frame_data_with_crc)):
-            frame_wave[j * 44 : (j + 1) * 44] = carrier[j * 44 : (j + 1) * 44] * (
-                int(frame_data_with_crc[j]) * 2 - 1
-            )
+
+            # OOK modulation
+            if frame_data_with_crc[j] == "1":
+                frame_wave[j * 44 : (j + 1) * 44] = carrier[j * 44 : (j + 1) * 44]
+            else:
+                frame_wave[j * 44 : (j + 1) * 44] = 0
+
+            # PSK modulation
+            # frame_wave[j * 44 : (j + 1) * 44] = carrier[j * 44 : (j + 1) * 44] * (
+            #     int(frame_data_with_crc[j]) * 2 - 1
+            # )
 
         frame_wave = np.concatenate([preamble, frame_wave])
 

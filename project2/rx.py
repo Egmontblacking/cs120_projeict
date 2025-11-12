@@ -129,49 +129,49 @@ try:
                     fc = 10 * 10**3  # carrier frequency 10kHz
                     carrier_local = np.sin(2 * np.pi * fc * t)  # about 1 second
 
-                    print(f"解调载波: 从 t=0 开始，共 {len(decodeFIFO)} 个样本")
+                    # PSK demodulation
+                    # # 与载波相乘（解调）
+                    # demodulated = decodeFIFO * carrier_local[: len(decodeFIFO)]
 
-                    # 与载波相乘（解调）
-                    demodulated = decodeFIFO * carrier_local[: len(decodeFIFO)]
+                    # # 平滑滤波（移动平均，窗口大小为 10）
+                    # from scipy.ndimage import uniform_filter1d
 
-                    # 平滑滤波（移动平均，窗口大小为 10）
-                    from scipy.ndimage import uniform_filter1d
+                    # decodeFIFO_removecarrier = uniform_filter1d(
+                    #     demodulated, size=10, mode="nearest"
+                    # )
 
-                    decodeFIFO_removecarrier = uniform_filter1d(
-                        demodulated, size=10, mode="nearest"
+                    # # 计算每个比特的功率
+                    # decodeFIFO_power_bit = np.zeros(108)  # 108 个比特
+                    # for j in range(108):
+                    #     # 对每个比特的中间部分（样本 10-30）求和
+                    #     decodeFIFO_power_bit[j] = np.sum(
+                    #         decodeFIFO_removecarrier[10 + j * 44 : 30 + j * 44]
+                    #     )
+
+                    # print(
+                    #     f"功率统计 - 最小: {decodeFIFO_power_bit.min():.4f}, 最大: {decodeFIFO_power_bit.max():.4f}"
+                    # )
+                    # print(
+                    #     f"正值数量: {np.sum(decodeFIFO_power_bit > 0)}, 负值数量: {np.sum(decodeFIFO_power_bit < 0)}"
+                    # )
+
+                    # decodeFIFO_power_bit = (decodeFIFO_power_bit < 0).astype(int)
+
+                    # OOK demodulation
+                    # 计算功率包络
+                    receive_power = decodeFIFO**2
+                    # 平滑处理
+                    receive_power_smooth = uniform_filter1d(
+                        receive_power, size=44, mode="nearest"
                     )
 
-                    # 可视化解调后的信号（可选）
-                    # plt.plot(decodeFIFO_removecarrier[:400])
-                    # plt.title("Demodulated Signal after Removing Carrier")
-                    # plt.xlabel("Sample")
-                    # plt.ylabel("Amplitude")
-                    # plt.show()
+                    # 采样点：每个比特的中间位置
+                    sampling_points = np.arange(22, len(receive_power_smooth), 44)
+                    samples = receive_power_smooth[sampling_points[:108]]
 
-                    # 计算每个比特的功率
-                    decodeFIFO_power_bit = np.zeros(108)  # 108 个比特
-                    for j in range(108):
-                        # 对每个比特的中间部分（样本 10-30）求和
-                        decodeFIFO_power_bit[j] = np.sum(
-                            decodeFIFO_removecarrier[10 + j * 44 : 30 + j * 44]
-                        )
-
-                    # 可视化比特功率（可选）
-                    # plt.plot(decodeFIFO_power_bit)
-                    # plt.title("Bit Power")
-                    # plt.xlabel("Bit Index")
-                    # plt.ylabel("Power")
-                    # plt.axhline(y=0, color='r', linestyle='--')
-                    # plt.show()
-
-                    print(
-                        f"功率统计 - 最小: {decodeFIFO_power_bit.min():.4f}, 最大: {decodeFIFO_power_bit.max():.4f}"
-                    )
-                    print(
-                        f"正值数量: {np.sum(decodeFIFO_power_bit > 0)}, 负值数量: {np.sum(decodeFIFO_power_bit < 0)}"
-                    )
-
-                    decodeFIFO_power_bit = (decodeFIFO_power_bit < 0).astype(int)
+                    # 判决阈值：功率平均值
+                    threshold = np.mean(receive_power)
+                    decodeFIFO_power_bit = (samples > threshold).astype(int)
 
                     # CRC 校验
                     received_data = decodeFIFO_power_bit[:100]  # 前 100 位数据
